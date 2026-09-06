@@ -1,0 +1,6 @@
+{
+  "name": "Review Master AI",
+  "description": "Private mobile-first study platform with folders, reviewers, file uploads (PDF, PPTX, DOCX, notes), strictly grounded flashcards, and quizzes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
