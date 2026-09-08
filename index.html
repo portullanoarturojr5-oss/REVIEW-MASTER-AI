@@ -9,6 +9,54 @@
     <meta property="og:description" content="Private mobile-first study platform with folders, reviewers, file uploads (PDF, PPTX, DOCX, notes), strictly grounded flashcards, and quizzes." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      /* Browser Compatibility Polyfill for ECMAScript Iterator Helpers */
+      (function() {
+        var g = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this || {};
+        if (typeof g.Iterator === 'undefined') {
+          function Iterator() {}
+          Iterator.prototype = Object.create(Object.prototype);
+          if (typeof Symbol !== 'undefined' && Symbol.iterator) {
+            Iterator.prototype[Symbol.iterator] = function() { return this; };
+          }
+          Iterator.from = function(iterable) {
+            if (!iterable) return [];
+            if (Array.isArray(iterable)) return iterable;
+            if (typeof Symbol !== 'undefined' && typeof iterable[Symbol.iterator] === 'function') {
+              return Array.from(iterable);
+            }
+            return [iterable];
+          };
+          Iterator.prototype.join = function(sep) {
+            return Array.from(this).join(sep === undefined ? ',' : sep);
+          };
+          Iterator.prototype.map = function(fn) {
+            return Array.from(this).map(fn);
+          };
+          Iterator.prototype.filter = function(fn) {
+            return Array.from(this).filter(fn);
+          };
+          Iterator.prototype.forEach = function(fn) {
+            Array.from(this).forEach(fn);
+          };
+          Iterator.prototype.toArray = function() {
+            return Array.from(this);
+          };
+          Iterator.prototype.some = function(fn) {
+            return Array.from(this).some(fn);
+          };
+          Iterator.prototype.every = function(fn) {
+            return Array.from(this).every(fn);
+          };
+          g.Iterator = Iterator;
+          if (typeof window !== 'undefined') window.Iterator = Iterator;
+        } else if (g.Iterator && g.Iterator.prototype && typeof g.Iterator.prototype.join !== 'function') {
+          g.Iterator.prototype.join = function(sep) {
+            return Array.from(this).join(sep === undefined ? ',' : sep);
+          };
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

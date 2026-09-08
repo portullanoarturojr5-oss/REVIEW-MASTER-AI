@@ -19,6 +19,9 @@ import {
   Plus,
   Play,
   Trophy,
+  Workflow,
+  Table as TableIcon,
+  Maximize2,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Reviewer, QuizQuestionItem, ProgressiveSetScore } from "../types";
@@ -55,6 +58,7 @@ export const QuizMode: React.FC<QuizModeProps> = ({
   const [feedbackMode, setFeedbackMode] = useState<"instant" | "exam">("instant");
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [filterReview, setFilterReview] = useState<"all" | "incorrect">("all");
+  const [zoomedImage, setZoomedImage] = useState<{ url: string; title: string } | null>(null);
 
   // Progressive Quiz Sets (10 questions per set, unique questions without repetition)
   const SET_SIZE = 10;
@@ -84,6 +88,9 @@ export const QuizMode: React.FC<QuizModeProps> = ({
   const rawQuestions: QuizQuestionItem[] = currentReviewer?.quizQuestions || [];
   const totalSets = Math.max(1, Math.ceil(rawQuestions.length / SET_SIZE));
   const safeActiveSet = Math.min(Math.max(1, activeSetNumber), totalSets);
+  const completedSetsCount = Object.keys(setScores).filter(
+    (k) => Number(k) <= totalSets
+  ).length;
 
   // Divide question bank into unique sets of 10 questions without repetition:
   const startIndex = (safeActiveSet - 1) * SET_SIZE;
@@ -356,9 +363,6 @@ export const QuizMode: React.FC<QuizModeProps> = ({
       return true;
     });
 
-    const completedSetsCount = Object.keys(setScores).filter(
-      (k) => Number(k) <= totalSets
-    ).length;
     const hasNextSet = !allQuestionsMode && safeActiveSet < totalSets;
     const isBankExhausted = !allQuestionsMode && safeActiveSet >= totalSets;
 
@@ -651,6 +655,23 @@ export const QuizMode: React.FC<QuizModeProps> = ({
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/40">
                         {q.type === "true_false" ? "True / False" : q.type.replace("_", " ")}
                       </span>
+                      {(q.isVisual || q.visualReference || q.questionCategory === "visual") && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex items-center gap-1">
+                          <Workflow className="w-3 h-3 text-cyan-400" />
+                          <span>Visual Learning</span>
+                        </span>
+                      )}
+                      {(q.tableContext || q.questionCategory === "table_comparison") && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-700/50 flex items-center gap-1">
+                          <TableIcon className="w-3 h-3 text-indigo-400" />
+                          <span>Table Comparison</span>
+                        </span>
+                      )}
+                      {q.pageOrSlide && (
+                        <span className="text-[10px] text-slate-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-900/40">
+                          P.{q.pageOrSlide}
+                        </span>
+                      )}
                     </div>
 
                     <span
@@ -687,6 +708,84 @@ export const QuizMode: React.FC<QuizModeProps> = ({
                       <span className="text-emerald-300 font-semibold">{q.correctAnswer}</span>
                     </div>
                   </div>
+
+                  {/* Visual Reference and Thumbnail if available */}
+                  {q.visualReference && (
+                    <div className="mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/70 border border-cyan-800/50 text-xs text-cyan-300 font-medium">
+                      <Workflow className="w-3.5 h-3.5" />
+                      <span>Reference: {q.visualReference}</span>
+                    </div>
+                  )}
+
+                  {q.visualDataUrl && (
+                    <div className="mb-3 p-2.5 rounded-xl bg-black/40 border border-cyan-500/30 max-w-sm">
+                      <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-cyan-900/40 text-[11px] text-cyan-300 font-semibold">
+                        <span>Diagram Visual</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setZoomedImage({
+                              url: q.visualDataUrl!,
+                              title: q.visualReference || q.question,
+                            })
+                          }
+                          className="px-2 py-0.5 rounded bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 flex items-center gap-1 text-[10px]"
+                        >
+                          <Maximize2 className="w-3 h-3" />
+                          <span>Zoom</span>
+                        </button>
+                      </div>
+                      <img
+                        src={q.visualDataUrl}
+                        alt={q.visualReference || "Question Diagram"}
+                        className="max-h-36 w-auto mx-auto object-contain rounded cursor-pointer"
+                        onClick={() =>
+                          setZoomedImage({
+                            url: q.visualDataUrl!,
+                            title: q.visualReference || q.question,
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+
+                  {/* Table Context if available */}
+                  {q.tableContext && (
+                    <div className="mb-3 p-3 rounded-xl bg-[#08122B] border border-indigo-500/30 space-y-2">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-300 uppercase tracking-wider">
+                        <TableIcon className="w-3 h-3" />
+                        <span>
+                          {typeof q.tableContext === "object" ? q.tableContext.title || "Reference Table" : "Reference Table"}
+                        </span>
+                      </div>
+                      {typeof q.tableContext === "string" ? (
+                        <p className="text-xs text-slate-300 whitespace-pre-line font-mono bg-black/30 p-2 rounded-lg border border-blue-900/30">
+                          {q.tableContext}
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-blue-900/40">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-blue-950/80 text-blue-300 border-b border-blue-900/50">
+                                {q.tableContext.headers?.map((h, i) => (
+                                  <th key={i} className="p-2 font-bold whitespace-nowrap">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-blue-900/30 text-slate-200">
+                              {q.tableContext.rows?.map((row, rIdx) => (
+                                <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-black/20" : "bg-transparent"}>
+                                  {row.map((c, cIdx) => (
+                                    <td key={cIdx} className="p-2">{c}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Verbatim Source Evidence Citation & Explanation */}
                   {q.sourceExcerpt && (
@@ -933,18 +1032,125 @@ export const QuizMode: React.FC<QuizModeProps> = ({
       {/* Main Question Card */}
       <div className="rounded-3xl bg-[#0D1836]/85 border-2 border-blue-500/30 p-6 sm:p-8 backdrop-blur-xl shadow-2xl shadow-blue-950/80 space-y-6">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider px-2 py-0.5 rounded bg-blue-950/80 border border-blue-800/40">
               Grounded Assessment
             </span>
+            {(currentQuestion.isVisual || currentQuestion.visualReference || currentQuestion.questionCategory === "visual") && (
+              <span className="text-[11px] font-bold text-cyan-300 uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-700/50 flex items-center gap-1">
+                <Workflow className="w-3 h-3 text-cyan-400" />
+                <span>Visual Learning</span>
+              </span>
+            )}
+            {(currentQuestion.tableContext || currentQuestion.questionCategory === "table_comparison") && (
+              <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-700/50 flex items-center gap-1">
+                <TableIcon className="w-3 h-3 text-indigo-400" />
+                <span>Table Comparison</span>
+              </span>
+            )}
+            {currentQuestion.pageOrSlide && (
+              <span className="text-[10px] text-slate-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-900/40">
+                Page/Slide {currentQuestion.pageOrSlide}
+              </span>
+            )}
             <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
               <ShieldCheck className="w-3 h-3" />
               <span>Strict Source Mode</span>
             </span>
           </div>
+
           <h3 className="text-base sm:text-xl font-bold text-white mt-2 leading-relaxed">
             {currentQuestion.question}
           </h3>
+
+          {/* Visual Reference indicator */}
+          {currentQuestion.visualReference && (
+            <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-950/70 border border-cyan-800/50 text-xs text-cyan-300 font-medium">
+              <Workflow className="w-3.5 h-3.5" />
+              <span>Reference: {currentQuestion.visualReference}</span>
+            </div>
+          )}
+
+          {/* Diagram Preview image if available */}
+          {currentQuestion.visualDataUrl && (
+            <div className="mt-4 p-3 rounded-2xl bg-black/40 border border-cyan-500/35 max-w-lg">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-cyan-900/40 text-xs text-cyan-300 font-semibold">
+                <span className="flex items-center gap-1.5">
+                  <Workflow className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Referenced Visual / Diagram</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setZoomedImage({
+                      url: currentQuestion.visualDataUrl!,
+                      title: currentQuestion.visualReference || currentQuestion.question,
+                    })
+                  }
+                  className="px-2.5 py-1 rounded bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 flex items-center gap-1 text-[11px] transition-colors"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                  <span>Zoom Visual</span>
+                </button>
+              </div>
+              <img
+                src={currentQuestion.visualDataUrl}
+                alt={currentQuestion.visualReference || "Question Diagram"}
+                className="max-h-52 w-auto mx-auto object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() =>
+                  setZoomedImage({
+                    url: currentQuestion.visualDataUrl!,
+                    title: currentQuestion.visualReference || currentQuestion.question,
+                  })
+                }
+              />
+            </div>
+          )}
+
+          {/* Table Context if available */}
+          {currentQuestion.tableContext && (
+            <div className="mt-4 p-4 rounded-2xl bg-[#08122B] border border-indigo-500/35 space-y-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-300 uppercase tracking-wider">
+                <TableIcon className="w-3.5 h-3.5" />
+                <span>
+                  {typeof currentQuestion.tableContext === "object"
+                    ? currentQuestion.tableContext.title || "Reference Table"
+                    : "Reference Table"}
+                </span>
+              </div>
+              {typeof currentQuestion.tableContext === "string" ? (
+                <p className="text-xs text-slate-300 whitespace-pre-line font-mono bg-black/30 p-2.5 rounded-xl border border-blue-900/30">
+                  {currentQuestion.tableContext}
+                </p>
+              ) : (
+                <>
+                  {currentQuestion.tableContext.summary && (
+                    <p className="text-xs text-slate-300 italic">{currentQuestion.tableContext.summary}</p>
+                  )}
+                  <div className="overflow-x-auto rounded-xl border border-blue-900/40">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-blue-950/80 text-blue-300 border-b border-blue-900/50">
+                          {currentQuestion.tableContext.headers?.map((h, i) => (
+                            <th key={i} className="p-2.5 font-bold whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-blue-900/30 text-slate-200">
+                        {currentQuestion.tableContext.rows?.map((row, rIdx) => (
+                          <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-black/20" : "bg-transparent"}>
+                            {row.map((c, cIdx) => (
+                              <td key={cIdx} className="p-2.5">{c}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Question Options / Inputs based on format */}
@@ -1238,6 +1444,38 @@ export const QuizMode: React.FC<QuizModeProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Zoomed Diagram Modal */}
+      {zoomedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setZoomedImage(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-[#0E1A38] border border-cyan-500/40 rounded-3xl p-4 shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between pb-3 border-b border-blue-900/40">
+              <span className="text-sm font-bold text-white truncate">
+                {zoomedImage.title}
+              </span>
+              <button
+                onClick={() => setZoomedImage(null)}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-2 overflow-auto max-h-[80vh] flex items-center justify-center">
+              <img
+                src={zoomedImage.url}
+                alt={zoomedImage.title}
+                className="max-h-[75vh] w-auto object-contain rounded-xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

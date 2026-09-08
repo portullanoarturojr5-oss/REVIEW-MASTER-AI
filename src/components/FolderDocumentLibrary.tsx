@@ -32,6 +32,7 @@ import {
 } from "../utils/storage";
 import { DocumentTextPreviewModal } from "./DocumentTextPreviewModal";
 import { CombinedReviewerModal } from "./CombinedReviewerModal";
+import { SubjectNotesReader } from "./SubjectNotesReader";
 
 interface FolderDocumentLibraryProps {
   folder: SubjectFolder;
@@ -42,6 +43,7 @@ interface FolderDocumentLibraryProps {
   onReviewerCreated: (reviewer: Reviewer) => void;
   onOpenReviewerCards: (reviewerId: string) => void;
   onOpenReviewerQuiz: (reviewerId: string) => void;
+  initialShowNotes?: boolean;
 }
 
 export const FolderDocumentLibrary: React.FC<FolderDocumentLibraryProps> = ({
@@ -53,6 +55,7 @@ export const FolderDocumentLibrary: React.FC<FolderDocumentLibraryProps> = ({
   onReviewerCreated,
   onOpenReviewerCards,
   onOpenReviewerQuiz,
+  initialShowNotes = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,7 +65,8 @@ export const FolderDocumentLibrary: React.FC<FolderDocumentLibraryProps> = ({
   const [uploadProgressText, setUploadProgressText] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Modals
+  // Modals & Views
+  const [showStudyNotes, setShowStudyNotes] = useState<boolean>(initialShowNotes);
   const [previewDoc, setPreviewDoc] = useState<FolderDocument | null>(null);
   const [showCombinedModal, setShowCombinedModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"documents" | "reviewers">("documents");
@@ -220,6 +224,49 @@ export const FolderDocumentLibrary: React.FC<FolderDocumentLibraryProps> = ({
 
   const selectedDocsList = folderDocuments.filter((d) => selectedDocIds.has(d.id));
 
+  // Full-page scrollable Study Notes Reader mode
+  if (showStudyNotes) {
+    return (
+      <div id="folder-study-notes-view" className="animate-fadeIn">
+        {/* Hidden File Input for Multiple Uploads */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.pptx,.docx,.txt"
+          onChange={handleFileInputChange}
+          className="hidden"
+        />
+
+        <SubjectNotesReader
+          folder={folder}
+          documents={documents}
+          reviewers={reviewers}
+          onBack={() => setShowStudyNotes(false)}
+          onOpenReviewerCards={onOpenReviewerCards}
+          onOpenReviewerQuiz={onOpenReviewerQuiz}
+          onOpenCombinedReview={() => setShowCombinedModal(true)}
+          onUploadMoreFiles={handleTriggerUpload}
+        />
+
+        {/* Combined Reviewer Generator Modal accessible from Study Notes */}
+        {showCombinedModal && (
+          <CombinedReviewerModal
+            folder={folder}
+            selectedDocuments={
+              selectedDocsList.length > 0 ? selectedDocsList : folderDocuments
+            }
+            onClose={() => setShowCombinedModal(false)}
+            onReviewerCreated={(newRev) => {
+              setShowCombinedModal(false);
+              onReviewerCreated(newRev);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div id="folder-document-library" className="space-y-6 animate-fadeIn">
       {/* Hidden File Input for Multiple Uploads */}
@@ -267,13 +314,24 @@ export const FolderDocumentLibrary: React.FC<FolderDocumentLibraryProps> = ({
           </div>
         </div>
 
-        {/* Primary Header Upload Button */}
-        <div className="flex items-center gap-2.5">
+        {/* Top-Right Corner Actions: Permanent Study Notes Button & Upload Button */}
+        <div className="flex items-center gap-2.5 flex-wrap justify-end">
+          {/* Permanent Study Notes Button */}
+          <button
+            id="btn-folder-study-notes"
+            onClick={() => setShowStudyNotes(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-blue-600/30 border border-blue-400/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            title="Open Full-Page Study Notes Reader"
+          >
+            <BookOpen className="w-4 h-4 text-blue-200" />
+            <span>Study Notes</span>
+          </button>
+
           <button
             id="btn-folder-upload-files"
             onClick={handleTriggerUpload}
             disabled={isUploading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-blue-600/30 border border-blue-400/30 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0E1A38] hover:bg-blue-900/50 text-blue-200 hover:text-white font-semibold text-xs sm:text-sm border border-blue-500/30 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
           >
             {isUploading ? (
               <>
@@ -293,18 +351,18 @@ export const FolderDocumentLibrary: React.FC<FolderDocumentLibraryProps> = ({
             <button
               id="btn-create-combined-reviewer"
               onClick={() => setShowCombinedModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-blue-600/40 border border-blue-400/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-indigo-600/40 border border-indigo-400/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Create Combined Reviewer ({selectedDocsList.length})</span>
+              <span>Combine ({selectedDocsList.length})</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Tabs: Documents vs Existing Reviewers */}
+      {/* Tabs: Documents vs Existing Reviewers vs Study Notes */}
       <div className="flex items-center justify-between border-b border-blue-900/40 pb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setActiveTab("documents")}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -325,8 +383,17 @@ export const FolderDocumentLibrary: React.FC<FolderDocumentLibraryProps> = ({
                 : "text-slate-400 hover:text-white"
             }`}
           >
-            <BookOpen className="w-3.5 h-3.5" />
+            <Layers className="w-3.5 h-3.5" />
             <span>Created Reviewers ({folderReviewers.length})</span>
+          </button>
+
+          <button
+            id="tab-btn-open-study-notes"
+            onClick={() => setShowStudyNotes(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-300 hover:text-white hover:bg-blue-600/20 border border-blue-500/20 transition-colors"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-blue-400" />
+            <span>Study Notes Reader</span>
           </button>
         </div>
 

@@ -15,6 +15,9 @@ import {
   BookOpen,
   Filter,
   Zap,
+  Workflow,
+  Maximize2,
+  X,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Reviewer, FlashcardItem, MasteryLevel } from "../types";
@@ -42,16 +45,20 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [filterMastery, setFilterMastery] = useState<"all" | "unmastered" | "mastered">("all");
+  const [filterMastery, setFilterMastery] = useState<"all" | "visuals" | "unmastered" | "mastered">("all");
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [zoomedImage, setZoomedImage] = useState<{ url: string; title: string } | null>(null);
 
   // Cards filtered by user preference
   const rawCards = currentReviewer?.flashcards || [];
   const cards = rawCards.filter((card) => {
+    if (filterMastery === "visuals") return card.isVisual || Boolean(card.visualReference || card.visualDataUrl);
     if (filterMastery === "unmastered") return card.mastery !== "mastered";
     if (filterMastery === "mastered") return card.mastery === "mastered";
     return true;
   });
+
+  const visualCardsCount = rawCards.filter((c) => c.isVisual || c.visualReference || c.visualDataUrl).length;
 
   const activeCard: FlashcardItem | null = cards[currentIndex] || null;
 
@@ -226,6 +233,19 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
             >
               All ({rawCards.length})
             </button>
+            {visualCardsCount > 0 && (
+              <button
+                onClick={() => setFilterMastery("visuals")}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                  filterMastery === "visuals"
+                    ? "bg-cyan-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                <Workflow className="w-3 h-3 text-cyan-300" />
+                <span>Visuals ({visualCardsCount})</span>
+              </button>
+            )}
             <button
               onClick={() => setFilterMastery("unmastered")}
               className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
@@ -340,10 +360,21 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
               {/* FRONT OF CARD */}
               <div className="backface-hidden absolute inset-0 rounded-3xl bg-gradient-to-b from-[#0E1A38] to-[#0A1229] border-2 border-blue-500/30 hover:border-blue-400/60 p-6 sm:p-8 flex flex-col justify-between shadow-2xl shadow-blue-950/80 transition-colors">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-2.5 py-1 rounded-lg bg-blue-600/20 text-blue-300 font-semibold border border-blue-500/30">
                       {activeCard.category || "Concept"}
                     </span>
+                    {(activeCard.isVisual || activeCard.visualReference) && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex items-center gap-1">
+                        <Workflow className="w-3 h-3 text-cyan-400" />
+                        <span>Visual Learning</span>
+                      </span>
+                    )}
+                    {activeCard.pageOrSlide && (
+                      <span className="text-[10px] text-slate-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-900/40">
+                        P.{activeCard.pageOrSlide}
+                      </span>
+                    )}
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                         activeCard.mastery === "mastered"
@@ -370,10 +401,40 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
                   </button>
                 </div>
 
-                <div className="my-auto py-6 text-center">
+                <div className="my-auto py-4 text-center space-y-3">
                   <h3 className="text-lg sm:text-2xl font-bold text-white leading-relaxed tracking-tight px-2">
                     {activeCard.front}
                   </h3>
+
+                  {activeCard.visualReference && (
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/70 border border-cyan-800/50 text-[11px] text-cyan-300 font-medium">
+                      <Workflow className="w-3 h-3" />
+                      <span>{activeCard.visualReference}</span>
+                    </div>
+                  )}
+
+                  {activeCard.visualDataUrl && (
+                    <div
+                      className="relative group max-w-xs mx-auto rounded-xl overflow-hidden border border-cyan-500/40 bg-black/40 mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setZoomedImage({
+                          url: activeCard.visualDataUrl!,
+                          title: activeCard.visualReference || activeCard.front,
+                        });
+                      }}
+                    >
+                      <img
+                        src={activeCard.visualDataUrl}
+                        alt={activeCard.visualReference || "Flashcard diagram"}
+                        className="max-h-28 w-auto mx-auto object-contain transition-transform group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-xs font-semibold gap-1">
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span>Inspect Diagram</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-xs text-slate-400 border-t border-blue-900/30 pt-3">
@@ -390,10 +451,18 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
               {/* BACK OF CARD */}
               <div className="backface-hidden rotate-y-180 absolute inset-0 rounded-3xl bg-gradient-to-b from-[#102047] to-[#0C1733] border-2 border-blue-400/50 p-6 sm:p-8 flex flex-col justify-between shadow-2xl shadow-blue-950/90">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-950/80 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Grounded Answer</span>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-950/80 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Grounded Answer</span>
+                    </span>
+                    {(activeCard.isVisual || activeCard.visualReference) && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex items-center gap-1">
+                        <Workflow className="w-3 h-3 text-cyan-400" />
+                        <span>Visual Grounded</span>
+                      </span>
+                    )}
+                  </div>
 
                   <button
                     type="button"
@@ -408,14 +477,14 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
                   </button>
                 </div>
 
-                <div className="my-auto py-4 space-y-4">
+                <div className="my-auto py-3 space-y-3">
                   <p className="text-base sm:text-xl font-medium text-white leading-relaxed text-center px-2">
                     {activeCard.back}
                   </p>
 
                   {/* Grounding Source Excerpt Box */}
                   {activeCard.sourceExcerpt && (
-                    <div className="rounded-xl bg-[#060B19]/80 border border-blue-500/20 p-3.5 text-left space-y-1">
+                    <div className="rounded-xl bg-[#060B19]/80 border border-blue-500/20 p-3 text-left space-y-1">
                       <div className="flex items-center gap-1 text-[11px] font-bold text-blue-300 uppercase tracking-wider">
                         <Quote className="w-3 h-3" />
                         <span>Verbatim Grounding Source:</span>
@@ -497,6 +566,38 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
           </div>
         </div>
       ) : null}
+
+      {/* Zoomed Diagram Modal */}
+      {zoomedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setZoomedImage(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-[#0E1A38] border border-cyan-500/40 rounded-3xl p-4 shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between pb-3 border-b border-blue-900/40">
+              <span className="text-sm font-bold text-white truncate">
+                {zoomedImage.title}
+              </span>
+              <button
+                onClick={() => setZoomedImage(null)}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-2 overflow-auto max-h-[80vh] flex items-center justify-center">
+              <img
+                src={zoomedImage.url}
+                alt={zoomedImage.title}
+                className="max-h-[75vh] w-auto object-contain rounded-xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

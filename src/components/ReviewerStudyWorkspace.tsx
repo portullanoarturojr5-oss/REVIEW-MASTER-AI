@@ -7,16 +7,18 @@ import {
   FolderKanban,
   ShieldCheck,
   Sparkles,
+  Workflow,
 } from "lucide-react";
 import { Reviewer, SubjectFolder } from "../types";
 import { FlashcardMode } from "./FlashcardMode";
 import { QuizMode } from "./QuizMode";
+import { StudyNotesWorkspace } from "./StudyNotesWorkspace";
 
 interface ReviewerStudyWorkspaceProps {
   reviewers: Reviewer[];
   activeReviewerId: string | null;
   folders: SubjectFolder[];
-  initialTab?: "flashcards" | "quiz";
+  initialTab?: "notes" | "flashcards" | "quiz";
   onSelectReviewer: (id: string) => void;
   onOpenGenerateMaterials: (reviewer: Reviewer) => void;
   onViewSourceNotes: (reviewer: Reviewer) => void;
@@ -27,13 +29,13 @@ export const ReviewerStudyWorkspace: React.FC<ReviewerStudyWorkspaceProps> = ({
   reviewers,
   activeReviewerId,
   folders,
-  initialTab = "flashcards",
+  initialTab = "notes",
   onSelectReviewer,
   onOpenGenerateMaterials,
   onViewSourceNotes,
   onReviewerUpdated,
 }) => {
-  const [studyTab, setStudyTab] = useState<"flashcards" | "quiz">(initialTab);
+  const [studyTab, setStudyTab] = useState<"notes" | "flashcards" | "quiz">(initialTab);
 
   const currentReviewer =
     reviewers.find((r) => r.id === activeReviewerId) || reviewers[0] || null;
@@ -51,6 +53,10 @@ export const ReviewerStudyWorkspace: React.FC<ReviewerStudyWorkspaceProps> = ({
       </div>
     );
   }
+
+  const notesCount = currentReviewer.studyNotes?.length || currentReviewer.keyConcepts?.length || 0;
+  const flashcardCount = currentReviewer.flashcards?.length || 0;
+  const quizCount = currentReviewer.quizQuestions?.length || 0;
 
   return (
     <div id="reviewer-study-workspace" className="space-y-6 max-w-5xl mx-auto">
@@ -74,6 +80,10 @@ export const ReviewerStudyWorkspace: React.FC<ReviewerStudyWorkspaceProps> = ({
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Strict Source Grounded</span>
             </span>
+            <span className="text-[10px] text-cyan-300 bg-cyan-950/70 border border-cyan-800/60 px-2 py-0.5 rounded-full flex items-center gap-1 font-medium">
+              <Workflow className="w-3 h-3" />
+              <span>Visual Learning v1.1</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -96,7 +106,7 @@ export const ReviewerStudyWorkspace: React.FC<ReviewerStudyWorkspaceProps> = ({
               className="text-xs text-blue-300 hover:text-white flex items-center gap-1 font-medium underline shrink-0 px-2 py-1 rounded-lg hover:bg-white/5 transition-colors"
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Inspect Source Notes</span>
+              <span>Raw Document</span>
             </button>
           </div>
         </div>
@@ -112,39 +122,58 @@ export const ReviewerStudyWorkspace: React.FC<ReviewerStudyWorkspaceProps> = ({
         </button>
       </div>
 
-      {/* Two Study Tabs: Flashcards & Practice Quiz */}
+      {/* Three Study Tabs: Study Notes, Flashcards, Practice Quiz */}
       <div className="flex items-center justify-center sm:justify-start">
-        <div className="flex items-center p-1.5 rounded-2xl bg-[#09122B] border border-blue-500/30 shadow-inner">
+        <div className="flex items-center p-1.5 rounded-2xl bg-[#09122B] border border-blue-500/30 shadow-inner gap-1">
+          <button
+            id="tab-study-notes"
+            onClick={() => setStudyTab("notes")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+              studyTab === "notes"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-600/40 ring-1 ring-blue-400/50"
+                : "text-slate-400 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-blue-300" />
+            <span>Study Notes ({notesCount})</span>
+          </button>
+
           <button
             id="tab-study-flashcards"
             onClick={() => setStudyTab("flashcards")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
               studyTab === "flashcards"
                 ? "bg-blue-600 text-white shadow-md shadow-blue-600/40 ring-1 ring-blue-400/50"
                 : "text-slate-400 hover:text-white hover:bg-white/5"
             }`}
           >
             <Layers className="w-4 h-4 text-blue-300" />
-            <span>Flashcards ({currentReviewer.flashcards?.length || 0})</span>
+            <span>Flashcards ({flashcardCount})</span>
           </button>
 
           <button
             id="tab-study-quiz"
             onClick={() => setStudyTab("quiz")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
               studyTab === "quiz"
                 ? "bg-blue-600 text-white shadow-md shadow-blue-600/40 ring-1 ring-blue-400/50"
                 : "text-slate-400 hover:text-white hover:bg-white/5"
             }`}
           >
             <HelpCircle className="w-4 h-4 text-blue-300" />
-            <span>Practice Quiz ({currentReviewer.quizQuestions?.length || 0})</span>
+            <span>Practice Quiz ({quizCount})</span>
           </button>
         </div>
       </div>
 
       {/* Tab Contents */}
-      {studyTab === "flashcards" ? (
+      {studyTab === "notes" ? (
+        <StudyNotesWorkspace
+          reviewer={currentReviewer}
+          onOpenGenerateMaterials={onOpenGenerateMaterials}
+          onViewSourceNotes={onViewSourceNotes}
+        />
+      ) : studyTab === "flashcards" ? (
         <FlashcardMode
           reviewers={reviewers}
           activeReviewerId={currentReviewer.id}

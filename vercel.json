@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/generate-reviewer",
+      "destination": "/api/generate-reviewer"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
+    }
+  ]
+}
+
+

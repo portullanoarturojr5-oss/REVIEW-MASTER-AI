@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   FolderPlus,
   FolderKanban,
@@ -86,6 +86,16 @@ export const SubjectFolders: React.FC<SubjectFoldersProps> = ({
       return null;
     }
   );
+  const [initialShowNotesForDocs, setInitialShowNotesForDocs] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (initialOpenFolderId) {
+      const targetFolder = folders.find((f) => f.id === initialOpenFolderId);
+      if (targetFolder) {
+        setSelectedFolderForDocs(targetFolder);
+      }
+    }
+  }, [initialOpenFolderId, folders]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingFolder, setEditingFolder] = useState<SubjectFolder | null>(null);
@@ -242,11 +252,15 @@ export const SubjectFolders: React.FC<SubjectFoldersProps> = ({
         folder={selectedFolderForDocs}
         documents={documents}
         reviewers={reviewers}
-        onBack={() => setSelectedFolderForDocs(null)}
+        onBack={() => {
+          setSelectedFolderForDocs(null);
+          setInitialShowNotesForDocs(false);
+        }}
         onDocumentsUpdated={onDocumentsUpdated}
         onReviewerCreated={onReviewerCreated}
         onOpenReviewerCards={onOpenReviewerCards}
         onOpenReviewerQuiz={onOpenReviewerQuiz}
+        initialShowNotes={initialShowNotesForDocs}
       />
     );
   }
@@ -428,6 +442,7 @@ export const SubjectFolders: React.FC<SubjectFoldersProps> = ({
                       id={`btn-open-doc-library-${folder.id}`}
                       onClick={(e) => {
                         e.stopPropagation();
+                        setInitialShowNotesForDocs(false);
                         setSelectedFolderForDocs(folder);
                       }}
                       className="px-3 py-2 rounded-xl bg-[#081226] hover:bg-blue-900/30 text-slate-300 hover:text-white border border-blue-500/20 text-xs font-medium transition-colors flex items-center gap-1"
@@ -435,6 +450,21 @@ export const SubjectFolders: React.FC<SubjectFoldersProps> = ({
                     >
                       <span>Files</span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+
+                    {/* View Study Notes */}
+                    <button
+                      id={`btn-open-study-notes-${folder.id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInitialShowNotesForDocs(true);
+                        setSelectedFolderForDocs(folder);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600 hover:to-indigo-600 text-blue-200 hover:text-white border border-blue-400/30 text-xs font-semibold transition-all flex items-center gap-1.5"
+                      title="Open Subject Study Notes Reader"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-blue-300" />
+                      <span>Study Notes</span>
                     </button>
 
                     {/* Quick New Reviewer */}

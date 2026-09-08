@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Reviewer, QuizQuestionType, QuizQuestionItem } from "../types";
 import { updateReviewer, resetSetScores } from "../utils/storage";
+import { requestStudyMaterialsGeneration } from "../utils/apiClient";
 
 interface GenerateStudyMaterialsModalProps {
   reviewer: Reviewer;
@@ -72,29 +73,16 @@ export const GenerateStudyMaterialsModal: React.FC<GenerateStudyMaterialsModalPr
       if (includeIdentification) allowedTypes.push("identification");
       if (includeShortAnswer) allowedTypes.push("short_answer");
 
-      const response = await fetch("/api/generate-reviewer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: reviewer.title,
-          content: reviewer.rawContent,
-          rawContent: reviewer.rawContent,
-          flashcardCount,
-          quizCount: questionCount,
-          quizQuestionCount: questionCount,
-          quizTypes: allowedTypes,
-          allowedQuestionTypes: allowedTypes,
-          strictSourceOnly: true,
-        }),
+      const data = await requestStudyMaterialsGeneration({
+        title: reviewer.title,
+        content: reviewer.rawContent,
+        flashcardCount,
+        quizCount: questionCount,
+        quizTypes: allowedTypes,
+        extractedVisuals: reviewer.extractedVisuals || [],
+        fileName: reviewer.sourceFileName || "Study Notes",
+        documentId: reviewer.id,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server responded with ${response.status}`);
-      }
-
-      const resJson = await response.json();
-      const data = resJson.data || resJson;
 
       const newFlashcards = (data.flashcards || []).map((fc: any, i: number) => ({
         id: `fc-${Date.now()}-${i}`,
@@ -103,6 +91,11 @@ export const GenerateStudyMaterialsModal: React.FC<GenerateStudyMaterialsModalPr
         sourceExcerpt: fc.sourceExcerpt || "",
         category: fc.category || "Key Concept",
         mastery: "new" as const,
+        isVisual: fc.isVisual,
+        visualReference: fc.visualReference,
+        visualDataUrl: fc.visualDataUrl,
+        pageOrSlide: fc.pageOrSlide,
+        sourceDoc: fc.sourceDoc,
       }));
 
       const newQuizQuestions = (data.quizQuestions || []).map((q: any, i: number) => ({
@@ -114,6 +107,13 @@ export const GenerateStudyMaterialsModal: React.FC<GenerateStudyMaterialsModalPr
         explanation: q.explanation,
         rubricKeywords: q.rubricKeywords || [],
         sourceExcerpt: q.sourceExcerpt || "",
+        isVisual: q.isVisual,
+        visualReference: q.visualReference,
+        visualDataUrl: q.visualDataUrl,
+        pageOrSlide: q.pageOrSlide,
+        sourceDoc: q.sourceDoc,
+        tableContext: q.tableContext,
+        questionCategory: q.questionCategory,
       }));
 
       let finalQuizQuestions = reviewer.quizQuestions || [];
@@ -136,6 +136,8 @@ export const GenerateStudyMaterialsModal: React.FC<GenerateStudyMaterialsModalPr
         ...reviewer,
         summary: data.summary || reviewer.summary,
         keyConcepts: data.keyConcepts?.length ? data.keyConcepts : reviewer.keyConcepts,
+        extractedVisuals: data.extractedVisuals?.length ? data.extractedVisuals : reviewer.extractedVisuals,
+        studyNotes: data.studyNotes?.length ? data.studyNotes : reviewer.studyNotes,
         flashcards: newFlashcards.length > 0 ? newFlashcards : reviewer.flashcards,
         quizQuestions: finalQuizQuestions,
         quizStats: bankMode === "replace" ? {
@@ -156,6 +158,8 @@ export const GenerateStudyMaterialsModal: React.FC<GenerateStudyMaterialsModalPr
         msg = "The AI service is experiencing high demand. Please click 'Generate Study Materials' again in a few seconds.";
       } else if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
         msg = "Rate limit reached. Please wait a few seconds before trying again.";
+      } else if (msg.includes("expected pattern")) {
+        msg = "A connection pattern issue was detected. A clean API path has been restored. Please try clicking Generate again.";
       }
       setErrorMessage(msg);
       setIsGenerating(false);

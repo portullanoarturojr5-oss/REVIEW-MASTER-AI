@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   BookOpen,
   Search,
@@ -36,6 +36,8 @@ interface ReviewLibraryProps {
   onViewSourceNotes: (reviewer: Reviewer) => void;
   onCreateNewReviewer: (folderId?: string) => void;
   onReviewersUpdated: () => void;
+  globalSearchQuery?: string;
+  onGlobalSearchQueryChange?: (query: string) => void;
 }
 
 export const ReviewLibrary: React.FC<ReviewLibraryProps> = ({
@@ -51,9 +53,17 @@ export const ReviewLibrary: React.FC<ReviewLibraryProps> = ({
   onViewSourceNotes,
   onCreateNewReviewer,
   onReviewersUpdated,
+  globalSearchQuery = "",
+  onGlobalSearchQueryChange,
 }) => {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(globalSearchQuery);
   const [sortBy, setSortBy] = useState<"recent" | "mastery" | "cards">("recent");
+
+  useEffect(() => {
+    if (globalSearchQuery !== undefined) {
+      setSearchQuery(globalSearchQuery);
+    }
+  }, [globalSearchQuery]);
 
   const selectedFolder = folders.find((f) => f.id === selectedFolderId);
 
@@ -220,7 +230,10 @@ export const ReviewLibrary: React.FC<ReviewLibraryProps> = ({
             type="text"
             placeholder="Search by topic, concept, keyword, or document filename..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              onGlobalSearchQueryChange?.(e.target.value);
+            }}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#0D1836]/90 border border-blue-500/20 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-400 backdrop-blur-md"
           />
         </div>

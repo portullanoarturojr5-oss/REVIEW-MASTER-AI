@@ -20,6 +20,7 @@ import {
 import { SubjectFolder, Reviewer, QuizQuestionType, FolderDocument } from "../types";
 import { parseUploadedFile, ParsedDocument } from "../utils/fileParser";
 import { saveNewReviewer, addFolderDocument } from "../utils/storage";
+import { requestStudyMaterialsGeneration } from "../utils/apiClient";
 
 interface CreateReviewerModalProps {
   folders: SubjectFolder[];
@@ -169,9 +170,8 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
     }
 
     const contentText = inputMode === "upload" ? parsedDoc?.text || "" : pastedNotes.trim();
-    const pdfBase64 = inputMode === "upload" && parsedDoc?.sourceType === "pdf" ? parsedDoc.pdfBase64 : undefined;
 
-    if (!contentText && !pdfBase64) {
+    if (!contentText) {
       alert("Please provide study content by uploading a file or pasting notes.");
       return;
     }
@@ -185,26 +185,17 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
       setTimeout(() => setGenerationStep("Extracting flashcards with exact source citations..."), 2600);
       setTimeout(() => setGenerationStep("Generating validated quiz questions..."), 4200);
 
-      const response = await fetch("/api/generate-reviewer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: contentText,
-          pdfBase64,
-          titleHint: titleHint.trim(),
-          flashcardCount,
-          quizCount,
-          quizTypes: selectedQuizTypes,
-        }),
+      const generatedData = await requestStudyMaterialsGeneration({
+        title: titleHint.trim() || "Study Reviewer",
+        titleHint: titleHint.trim(),
+        content: contentText,
+        flashcardCount,
+        quizCount,
+        quizTypes: selectedQuizTypes,
+        extractedVisuals: parsedDoc?.extractedVisuals || [],
+        fileName: inputMode === "upload" ? parsedDoc?.fileName : "Pasted Notes",
+        documentId: inputMode === "upload" ? `doc-${Date.now()}` : "doc-notes",
       });
-
-      const resJson = await response.json();
-
-      if (!response.ok || !resJson.success) {
-        throw new Error(resJson.error || "Failed to generate reviewer.");
-      }
-
-      const generatedData = resJson.data;
 
       // Construct formatted Reviewer object
       const newReviewer: Reviewer = {
@@ -216,6 +207,8 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
         sourceFileName: inputMode === "upload" ? parsedDoc?.fileName : "Pasted Notes",
         rawContent: contentText,
         keyConcepts: generatedData.keyConcepts || [],
+        extractedVisuals: generatedData.extractedVisuals || parsedDoc?.extractedVisuals || [],
+        studyNotes: generatedData.studyNotes || [],
         flashcards: (generatedData.flashcards || []).map((fc: any, idx: number) => ({
           id: `fc-${Date.now()}-${idx}`,
           front: fc.front,
@@ -223,6 +216,11 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
           sourceExcerpt: fc.sourceExcerpt,
           category: fc.category || "General",
           mastery: "new" as const,
+          isVisual: fc.isVisual,
+          visualReference: fc.visualReference,
+          visualDataUrl: fc.visualDataUrl,
+          pageOrSlide: fc.pageOrSlide,
+          sourceDoc: fc.sourceDoc,
         })),
         quizQuestions: (generatedData.quizQuestions || []).map((q: any, idx: number) => ({
           id: `qz-${Date.now()}-${idx}`,
@@ -232,6 +230,14 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
           correctAnswer: q.correctAnswer,
           sourceExcerpt: q.sourceExcerpt,
           explanation: q.explanation,
+          rubricKeywords: q.rubricKeywords || [],
+          isVisual: q.isVisual,
+          visualReference: q.visualReference,
+          visualDataUrl: q.visualDataUrl,
+          pageOrSlide: q.pageOrSlide,
+          sourceDoc: q.sourceDoc,
+          tableContext: q.tableContext,
+          questionCategory: q.questionCategory,
         })),
         quizStats: {
           totalAttempts: 0,
@@ -255,6 +261,7 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
           text: contentText,
           pageOrSlideCount: parsedDoc.pageOrSlideCount,
           pdfBase64: parsedDoc.pdfBase64,
+          extractedVisuals: parsedDoc.extractedVisuals,
           uploadedAt: new Date().toISOString(),
         };
         addFolderDocument(folderDoc);
@@ -268,6 +275,8 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
         msg = "The AI service is experiencing momentary high demand. Please click 'Generate Grounded Reviewer' again in a few seconds.";
       } else if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
         msg = "Rate limit reached. Please wait a few seconds and try again.";
+      } else if (msg.includes("expected pattern")) {
+        msg = "A connection pattern issue was detected. A clean API path has been restored. Please try clicking Generate again.";
       }
       setGenerationError(msg);
       setIsGenerating(false);

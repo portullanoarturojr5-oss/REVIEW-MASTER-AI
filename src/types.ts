@@ -10,6 +10,38 @@ export interface SubjectFolder {
 
 export type MasteryLevel = "new" | "learning" | "mastered";
 
+export interface ExtractedVisual {
+  id: string;
+  title: string;
+  type: "diagram" | "flowchart" | "table" | "illustration" | "figure" | "concept_map";
+  pageOrSlide?: number;
+  dataUrl?: string; // Base64 data URL for display
+  description?: string;
+  sourceExcerpt?: string;
+  sourceDoc?: string;
+}
+
+export interface ComparisonTable {
+  title?: string;
+  headers: string[];
+  rows: string[][];
+  summary?: string;
+  pageOrSlide?: number;
+}
+
+export interface StudyNoteSection {
+  id: string;
+  heading: string;
+  definition: string;
+  explanation: string;
+  diagramSummary?: string; // Describe what the diagram shows using only visible information
+  visualReference?: string;
+  visualDataUrl?: string;
+  pageOrSlide?: number;
+  sourceExcerpt?: string;
+  comparisonTable?: ComparisonTable;
+}
+
 export interface FlashcardItem {
   id: string;
   front: string;
@@ -18,6 +50,12 @@ export interface FlashcardItem {
   category?: string;
   mastery: MasteryLevel;
   lastReviewed?: string;
+  // Version 1.1 Visual Learning enhancements
+  isVisual?: boolean;
+  visualReference?: string;
+  visualDataUrl?: string;
+  pageOrSlide?: number;
+  sourceDoc?: string;
 }
 
 export type QuizQuestionType =
@@ -25,6 +63,12 @@ export type QuizQuestionType =
   | "true_false"
   | "identification"
   | "short_answer";
+
+export type QuestionCategory =
+  | "standard"
+  | "visual"
+  | "table_comparison"
+  | "classification";
 
 export interface QuizQuestionItem {
   id: string;
@@ -37,6 +81,14 @@ export interface QuizQuestionItem {
   rubricKeywords?: string[]; // Key concepts for short answer grading
   userAnswer?: string;
   isCorrect?: boolean;
+  // Version 1.1 Visual Learning & Table Understanding enhancements
+  isVisual?: boolean;
+  visualReference?: string;
+  visualDataUrl?: string;
+  pageOrSlide?: number;
+  sourceDoc?: string;
+  tableContext?: string | ComparisonTable;
+  questionCategory?: QuestionCategory;
 }
 
 export interface ProgressiveSetScore {
@@ -64,6 +116,8 @@ export interface Reviewer {
   sourceFileName?: string;
   rawContent: string;
   keyConcepts: string[];
+  studyNotes?: StudyNoteSection[];
+  extractedVisuals?: ExtractedVisual[];
   flashcards: FlashcardItem[];
   quizQuestions: QuizQuestionItem[];
   quizStats: QuizStats;
@@ -85,6 +139,7 @@ export interface FolderDocument {
   pageOrSlideCount?: number;
   uploadedAt: string;
   pdfBase64?: string;
+  extractedVisuals?: ExtractedVisual[];
 }
 
 export interface GenerationOptions {

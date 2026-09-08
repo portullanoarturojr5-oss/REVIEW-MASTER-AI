@@ -14,6 +14,7 @@ import {
 import { SubjectFolder, FolderDocument, Reviewer, QuizQuestionType } from "../types";
 import { combineDocumentsCorpus } from "../utils/fileParser";
 import { saveNewReviewer } from "../utils/storage";
+import { requestStudyMaterialsGeneration } from "../utils/apiClient";
 
 interface CombinedReviewerModalProps {
   folder: SubjectFolder;
@@ -28,7 +29,7 @@ export const CombinedReviewerModal: React.FC<CombinedReviewerModalProps> = ({
   onClose,
   onReviewerCreated,
 }) => {
-  const { combinedText, titleHint: defaultTitleHint } = combineDocumentsCorpus(selectedDocuments);
+  const { combinedText, titleHint: defaultTitleHint, extractedVisuals } = combineDocumentsCorpus(selectedDocuments);
 
   const [titleHint, setTitleHint] = useState(
     selectedDocuments.length > 1
@@ -79,28 +80,21 @@ export const CombinedReviewerModal: React.FC<CombinedReviewerModalProps> = ({
         setGenerationStep("Drafting strictly grounded flashcards & questions...");
       }, 3500);
 
-      const response = await fetch("/api/generate-reviewer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: combinedText,
-          titleHint: titleHint.trim() || `${folder.name} Combined Reviewer`,
-          flashcardCount,
-          quizCount,
-          quizTypes: selectedQuizTypes,
-        }),
+      const generatedData = await requestStudyMaterialsGeneration({
+        title: titleHint.trim() || `${folder.name} Combined Reviewer`,
+        titleHint: titleHint.trim() || `${folder.name} Combined Reviewer`,
+        content: combinedText,
+        flashcardCount,
+        quizCount,
+        quizTypes: selectedQuizTypes,
+        extractedVisuals: extractedVisuals || [],
+        documentIds: selectedDocuments.map((d) => d.id),
+        fileNames: selectedDocuments.map((d) => d.name),
+        fileName: selectedDocuments.length > 0 ? selectedDocuments[0].name : "Combined Documents",
       });
 
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
-
-      const resJson = await response.json();
-
-      if (!response.ok || !resJson.success) {
-        throw new Error(resJson.error || "Failed to generate combined reviewer.");
-      }
-
-      const generatedData = resJson.data;
 
       // Determine predominant source type
       const types = new Set(selectedDocuments.map((d) => d.fileType));
@@ -122,6 +116,8 @@ export const CombinedReviewerModal: React.FC<CombinedReviewerModalProps> = ({
         sourceFileName: `${selectedDocuments.length} Documents: ${selectedDocuments.map((d) => d.name).join(", ")}`,
         rawContent: combinedText,
         keyConcepts: generatedData.keyConcepts || [],
+        extractedVisuals: generatedData.extractedVisuals || extractedVisuals || [],
+        studyNotes: generatedData.studyNotes || [],
         flashcards: (generatedData.flashcards || []).map((fc: any, idx: number) => ({
           id: `fc-${Date.now()}-${idx}`,
           front: fc.front,
@@ -129,6 +125,11 @@ export const CombinedReviewerModal: React.FC<CombinedReviewerModalProps> = ({
           sourceExcerpt: fc.sourceExcerpt || "",
           category: fc.category || "Combined Synthesis",
           mastery: "new" as const,
+          isVisual: fc.isVisual,
+          visualReference: fc.visualReference,
+          visualDataUrl: fc.visualDataUrl,
+          pageOrSlide: fc.pageOrSlide,
+          sourceDoc: fc.sourceDoc,
         })),
         quizQuestions: (generatedData.quizQuestions || []).map((q: any, idx: number) => ({
           id: `qz-${Date.now()}-${idx}`,
@@ -139,6 +140,13 @@ export const CombinedReviewerModal: React.FC<CombinedReviewerModalProps> = ({
           sourceExcerpt: q.sourceExcerpt || "",
           explanation: q.explanation || "",
           rubricKeywords: q.rubricKeywords || [],
+          isVisual: q.isVisual,
+          visualReference: q.visualReference,
+          visualDataUrl: q.visualDataUrl,
+          pageOrSlide: q.pageOrSlide,
+          sourceDoc: q.sourceDoc,
+          tableContext: q.tableContext,
+          questionCategory: q.questionCategory,
         })),
         quizStats: {
           totalAttempts: 0,
@@ -158,6 +166,8 @@ export const CombinedReviewerModal: React.FC<CombinedReviewerModalProps> = ({
         msg = "The AI service is experiencing momentary high demand. Please try clicking Generate again in a few seconds.";
       } else if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
         msg = "Rate limit reached. Please wait a few seconds before trying again.";
+      } else if (msg.includes("expected pattern")) {
+        msg = "A connection pattern issue was detected. A clean API path has been restored. Please try clicking Generate again.";
       }
       setGenerationError(msg);
       setIsGenerating(false);
