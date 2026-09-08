@@ -4,6 +4,12 @@ import {
   StudyNoteSection,
   ExtractedVisual,
 } from "../types";
+import {
+  extractReadableErrorMessage,
+  formatUserFriendlyGenerationError,
+} from "./errorParser";
+
+export { extractReadableErrorMessage, formatUserFriendlyGenerationError };
 
 export interface GenerateReviewerApiParams {
   title?: string;
@@ -300,9 +306,11 @@ export async function requestStudyMaterialsGeneration(
   }
 
   // Safely parse JSON
-  let resJson: any;
+  let resJson: any = null;
+  let parseSucceeded = false;
   try {
     resJson = JSON.parse(rawText);
+    parseSucceeded = true;
   } catch (parseErr) {
     console.error(
       "Failed to parse JSON response from study materials endpoint:",
@@ -331,21 +339,27 @@ export async function requestStudyMaterialsGeneration(
       );
     }
 
+    // Check if server response text has a readable message (Requirement 2)
+    if (trimmed && !trimmed.startsWith("<") && trimmed.length < 250) {
+      throw new Error(trimmed);
+    }
+
     throw new Error(
       "The AI server returned an unexpected response format. Please try again in a few moments."
     );
   }
 
-  // Handle server-side reported errors (extract exact message from server JSON)
-  if (!response.ok || resJson.success === false) {
-    const errorMsg =
-      resJson.error ||
-      resJson.message ||
-      (response.status === 429
+  // Handle server-side reported errors (extract exact message from server JSON safely)
+  if (!response.ok || (parseSucceeded && resJson && resJson.success === false) || (parseSucceeded && resJson && resJson.error && !resJson.flashcards && !resJson.quizQuestions)) {
+    const defaultFallback =
+      response.status === 429
         ? "Gemini AI rate limit reached. Please wait a moment and try clicking Generate again."
         : response.status === 503
         ? "The AI service is experiencing temporary high demand spikes. Please try clicking Generate again in a few moments."
-        : `Generation request failed (HTTP ${response.status}).`);
+        : `Generation request failed (HTTP ${response.status}).`;
+
+    // Safely extract from resJson (handles error.message, resJson.message, resJson.error as string/object)
+    const errorMsg = extractReadableErrorMessage(resJson, defaultFallback);
     throw new Error(errorMsg);
   }
 

@@ -14,7 +14,10 @@ import {
 import { SubjectFolder, FolderDocument, Reviewer, QuizQuestionType } from "../types";
 import { combineDocumentsCorpus } from "../utils/fileParser";
 import { saveNewReviewer } from "../utils/storage";
-import { requestStudyMaterialsGeneration } from "../utils/apiClient";
+import {
+  requestStudyMaterialsGeneration,
+  formatUserFriendlyGenerationError,
+} from "../utils/apiClient";
 
 interface CombinedReviewerModalProps {
   folder: SubjectFolder;
@@ -160,16 +163,11 @@ export const CombinedReviewerModal: React.FC<CombinedReviewerModalProps> = ({
       saveNewReviewer(newReviewer);
       onReviewerCreated(newReviewer);
     } catch (err: any) {
-      console.error("Combined reviewer generation error:", err);
-      let msg = err.message || "An unexpected error occurred while generating.";
-      if (msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("high demand")) {
-        msg = "The AI service is experiencing momentary high demand. Please try clicking Generate again in a few seconds.";
-      } else if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
-        msg = "Rate limit reached. Please wait a few seconds before trying again.";
-      } else if (msg.includes("expected pattern")) {
-        msg = "A connection pattern issue was detected. A clean API path has been restored. Please try clicking Generate again.";
-      }
-      setGenerationError(msg);
+      const friendlyMsg = formatUserFriendlyGenerationError(
+        err,
+        "Combined Reviewer Generation"
+      );
+      setGenerationError(friendlyMsg);
       setIsGenerating(false);
     }
   };
@@ -395,7 +393,11 @@ export const CombinedReviewerModal: React.FC<CombinedReviewerModalProps> = ({
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div className="flex-1 leading-relaxed">
                 <span className="font-semibold block text-white mb-0.5">Generation Notice</span>
-                <span>{generationError}</span>
+                <span>
+                  {typeof generationError === "string" && generationError !== "[object Object]"
+                    ? generationError
+                    : "The AI service is experiencing a temporary issue. Please click Generate again in a few moments."}
+                </span>
               </div>
             </div>
           )}

@@ -13,7 +13,10 @@ import {
 } from "lucide-react";
 import { Reviewer, QuizQuestionType, QuizQuestionItem } from "../types";
 import { updateReviewer, resetSetScores } from "../utils/storage";
-import { requestStudyMaterialsGeneration } from "../utils/apiClient";
+import {
+  requestStudyMaterialsGeneration,
+  formatUserFriendlyGenerationError,
+} from "../utils/apiClient";
 
 interface GenerateStudyMaterialsModalProps {
   reviewer: Reviewer;
@@ -152,16 +155,11 @@ export const GenerateStudyMaterialsModal: React.FC<GenerateStudyMaterialsModalPr
       updateReviewer(updatedReviewer);
       onGenerated(updatedReviewer, targetTab);
     } catch (err: any) {
-      console.error("Study generation failed:", err);
-      let msg = err.message || "Failed to generate study materials. Please verify your connection and try again.";
-      if (msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("high demand")) {
-        msg = "The AI service is experiencing high demand. Please click 'Generate Study Materials' again in a few seconds.";
-      } else if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
-        msg = "Rate limit reached. Please wait a few seconds before trying again.";
-      } else if (msg.includes("expected pattern")) {
-        msg = "A connection pattern issue was detected. A clean API path has been restored. Please try clicking Generate again.";
-      }
-      setErrorMessage(msg);
+      const friendlyMsg = formatUserFriendlyGenerationError(
+        err,
+        "Generate Study Materials"
+      );
+      setErrorMessage(friendlyMsg);
       setIsGenerating(false);
     }
   };
@@ -415,7 +413,11 @@ export const GenerateStudyMaterialsModal: React.FC<GenerateStudyMaterialsModalPr
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div className="flex-1 leading-relaxed">
                 <span className="font-semibold block text-white mb-0.5">Generation Notice</span>
-                <span>{errorMessage}</span>
+                <span>
+                  {typeof errorMessage === "string" && errorMessage !== "[object Object]"
+                    ? errorMessage
+                    : "The AI service is experiencing a temporary issue. Please click 'Generate Study Materials' again in a few seconds."}
+                </span>
               </div>
             </div>
           )}

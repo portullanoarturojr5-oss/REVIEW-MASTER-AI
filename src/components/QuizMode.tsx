@@ -24,8 +24,12 @@ import {
   Maximize2,
 } from "lucide-react";
 import confetti from "canvas-confetti";
-import { Reviewer, QuizQuestionItem, ProgressiveSetScore } from "../types";
+import { Reviewer, QuizQuestionItem, ProgressiveSetScore, IdentificationGradingResult } from "../types";
 import { recordQuizResult, recordProgressiveQuizResult, getSetScores, resetSetScores } from "../utils/storage";
+import {
+  gradeIdentificationAnswer,
+  gradeIdentificationAnswerLocally,
+} from "../utils/identificationEvaluator";
 
 interface QuizModeProps {
   reviewers: Reviewer[];
@@ -52,6 +56,8 @@ export const QuizMode: React.FC<QuizModeProps> = ({
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [identificationInput, setIdentificationInput] = useState("");
+  const [identificationGrades, setIdentificationGrades] = useState<Record<number, IdentificationGradingResult>>({});
+  const [isGradingIdentification, setIsGradingIdentification] = useState(false);
   const [shortAnswerInput, setShortAnswerInput] = useState("");
   const [selfGradedOverrides, setSelfGradedOverrides] = useState<Record<number, boolean>>({});
   const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
@@ -133,10 +139,87 @@ export const QuizMode: React.FC<QuizModeProps> = ({
     setCurrentQuestionIdx(0);
     setSelectedAnswers({});
     setIdentificationInput("");
+    setIdentificationGrades({});
+    setIsGradingIdentification(false);
     setShortAnswerInput("");
     setSelfGradedOverrides({});
     setIsAnswerSubmitted(false);
     setQuizCompleted(false);
+  };
+
+  const getIdentificationGrade = (
+    question: QuizQuestionItem,
+    userAnswer?: string,
+    questionIdx?: number
+  ): IdentificationGradingResult => {
+    if (questionIdx !== undefined && identificationGrades[questionIdx]) {
+      return identificationGrades[questionIdx];
+    }
+    return gradeIdentificationAnswerLocally(
+      question.correctAnswer,
+      userAnswer || "",
+      question.question,
+      question.sourceExcerpt
+    );
+  };
+
+  const isAnswerPartiallyCorrect = (
+    question: QuizQuestionItem,
+    userAnswer?: string,
+    questionIdx?: number
+  ): boolean => {
+    if (question.type !== "identification") return false;
+    if (questionIdx !== undefined && selfGradedOverrides[questionIdx] !== undefined) {
+      return false;
+    }
+    if (!userAnswer || !userAnswer.trim()) return false;
+    const grade = getIdentificationGrade(question, userAnswer.trim(), questionIdx);
+    return grade.scorePercent >= 60 && grade.scorePercent < 75;
+  };
+
+  const calculateScores = () => {
+    let earnedPoints = 0;
+    let fullyCorrectCount = 0;
+    let partiallyCorrectCount = 0;
+
+    questions.forEach((q, idx) => {
+      const userAns = selectedAnswers[idx];
+      if (selfGradedOverrides[idx] !== undefined) {
+        if (selfGradedOverrides[idx]) {
+          earnedPoints += 1;
+          fullyCorrectCount += 1;
+        }
+        return;
+      }
+
+      if (q.type === "identification") {
+        const grade = getIdentificationGrade(q, userAns, idx);
+        if (grade.scorePercent >= 75) {
+          earnedPoints += 1;
+          fullyCorrectCount += 1;
+        } else if (grade.scorePercent >= 60) {
+          earnedPoints += 0.5;
+          partiallyCorrectCount += 1;
+        }
+      } else {
+        if (isAnswerCorrect(q, userAns, idx)) {
+          earnedPoints += 1;
+          fullyCorrectCount += 1;
+        }
+      }
+    });
+
+    const scorePercent =
+      questions.length > 0
+        ? Math.min(100, Math.round((earnedPoints / questions.length) * 100))
+        : 0;
+
+    return {
+      earnedPoints,
+      fullyCorrectCount,
+      partiallyCorrectCount,
+      scorePercent,
+    };
   };
 
   const handleSelectOption = (option: string) => {
@@ -150,17 +233,56 @@ export const QuizMode: React.FC<QuizModeProps> = ({
     setIsAnswerSubmitted(true);
   };
 
-  const handleIdentificationSubmit = (e?: React.FormEvent) => {
+  const handleIdentificationSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!identificationInput.trim()) return;
 
     const trimmed = identificationInput.trim();
+    const qIdx = currentQuestionIdx;
+    const currentQ = currentQuestion;
+
     setSelectedAnswers((prev) => ({
       ...prev,
-      [currentQuestionIdx]: trimmed,
+      [qIdx]: trimmed,
+    }));
+
+    // Immediate local evaluation for zero lag
+    const localGrade = gradeIdentificationAnswerLocally(
+      currentQ.correctAnswer,
+      trimmed,
+      currentQ.question,
+      currentQ.sourceExcerpt
+    );
+
+    setIdentificationGrades((prev) => ({
+      ...prev,
+      [qIdx]: localGrade,
     }));
 
     setIsAnswerSubmitted(true);
+
+    if (localGrade.scorePercent >= 98 || localGrade.scorePercent <= 20 || feedbackMode === "exam") {
+      return;
+    }
+
+    setIsGradingIdentification(true);
+    try {
+      const aiGrade = await gradeIdentificationAnswer({
+        question: currentQ.question,
+        groundedAnswer: currentQ.correctAnswer,
+        studentAnswer: trimmed,
+        sourceExcerpt: currentQ.sourceExcerpt,
+      });
+
+      setIdentificationGrades((prev) => ({
+        ...prev,
+        [qIdx]: aiGrade,
+      }));
+    } catch (_err) {
+      // Local grade is already safely preserved
+    } finally {
+      setIsGradingIdentification(false);
+    }
   };
 
   const handleShortAnswerSubmit = (e?: React.FormEvent) => {
@@ -179,10 +301,23 @@ export const QuizMode: React.FC<QuizModeProps> = ({
   const handleNextQuestion = () => {
     // Save any typed answer before advancing
     if (currentQuestion?.type === "identification" && identificationInput.trim()) {
+      const trimmed = identificationInput.trim();
       setSelectedAnswers((prev) => ({
         ...prev,
-        [currentQuestionIdx]: identificationInput.trim(),
+        [currentQuestionIdx]: trimmed,
       }));
+      if (!identificationGrades[currentQuestionIdx]) {
+        const localGrade = gradeIdentificationAnswerLocally(
+          currentQuestion.correctAnswer,
+          trimmed,
+          currentQuestion.question,
+          currentQuestion.sourceExcerpt
+        );
+        setIdentificationGrades((prev) => ({
+          ...prev,
+          [currentQuestionIdx]: localGrade,
+        }));
+      }
     } else if (currentQuestion?.type === "short_answer" && shortAnswerInput.trim()) {
       setSelectedAnswers((prev) => ({
         ...prev,
@@ -212,19 +347,29 @@ export const QuizMode: React.FC<QuizModeProps> = ({
     }
 
     if (!userAnswer || !userAnswer.trim()) return false;
-    const cleanUser = userAnswer.trim().toLowerCase();
-    const cleanCorrect = question.correctAnswer.trim().toLowerCase();
+    const cleanUser = userAnswer.trim();
+    const cleanCorrect = question.correctAnswer.trim();
 
-    if (cleanUser === cleanCorrect) return true;
+    // Intelligent Identification Grading based on meaning
+    if (question.type === "identification") {
+      const grade = getIdentificationGrade(question, cleanUser, questionIdx);
+      // 90–100% -> Correct, 75–89% -> Correct (same meaning)
+      return grade.scorePercent >= 75;
+    }
+
+    const cleanUserLower = cleanUser.toLowerCase();
+    const cleanCorrectLower = cleanCorrect.toLowerCase();
+
+    if (cleanUserLower === cleanCorrectLower) return true;
 
     // Fuzzy check for minor punctuation or pluralization
     const stripPunct = (s: string) => s.replace(/[^a-z0-9]/g, "");
-    if (stripPunct(cleanUser) === stripPunct(cleanCorrect)) return true;
+    if (stripPunct(cleanUserLower) === stripPunct(cleanCorrectLower)) return true;
 
     // True/False normalized check
     if (question.type === "true_false") {
-      const isUserTrue = cleanUser.startsWith("t");
-      const isCorrectTrue = cleanCorrect.startsWith("t");
+      const isUserTrue = cleanUserLower.startsWith("t");
+      const isCorrectTrue = cleanCorrectLower.startsWith("t");
       return isUserTrue === isCorrectTrue;
     }
 
@@ -234,7 +379,7 @@ export const QuizMode: React.FC<QuizModeProps> = ({
       if (question.rubricKeywords && question.rubricKeywords.length > 0) {
         let matchedKeywords = 0;
         question.rubricKeywords.forEach((kw) => {
-          if (cleanUser.includes(kw.toLowerCase().trim())) {
+          if (cleanUserLower.includes(kw.toLowerCase().trim())) {
             matchedKeywords++;
           }
         });
@@ -244,13 +389,13 @@ export const QuizMode: React.FC<QuizModeProps> = ({
       }
 
       // Check overlap of significant words with the model answer
-      const modelWords = cleanCorrect
+      const modelWords = cleanCorrectLower
         .split(/\s+/)
         .filter((w) => w.length > 3)
         .map(stripPunct);
       let overlap = 0;
       modelWords.forEach((w) => {
-        if (cleanUser.includes(w)) overlap++;
+        if (cleanUserLower.includes(w)) overlap++;
       });
       if (modelWords.length > 0 && overlap / modelWords.length >= 0.4) {
         return true;
@@ -263,17 +408,7 @@ export const QuizMode: React.FC<QuizModeProps> = ({
   const finishQuiz = () => {
     setQuizCompleted(true);
 
-    let correctCount = 0;
-    questions.forEach((q, idx) => {
-      if (isAnswerCorrect(q, selectedAnswers[idx], idx)) {
-        correctCount++;
-      }
-    });
-
-    const scorePercent =
-      questions.length > 0
-        ? Math.round((correctCount / questions.length) * 100)
-        : 0;
+    const { scorePercent, earnedPoints } = calculateScores();
 
     if (currentReviewer) {
       if (!allQuestionsMode) {
@@ -281,7 +416,7 @@ export const QuizMode: React.FC<QuizModeProps> = ({
           currentReviewer.id,
           safeActiveSet,
           scorePercent,
-          correctCount,
+          Math.round(earnedPoints),
           questions.length
         );
         const updatedScores = getSetScores(currentReviewer.id);
@@ -345,16 +480,7 @@ export const QuizMode: React.FC<QuizModeProps> = ({
 
   // Final Results Screen
   if (quizCompleted) {
-    let correctCount = 0;
-    questions.forEach((q, idx) => {
-      if (isAnswerCorrect(q, selectedAnswers[idx], idx)) {
-        correctCount++;
-      }
-    });
-    const scorePercent =
-      questions.length > 0
-        ? Math.round((correctCount / questions.length) * 100)
-        : 0;
+    const { earnedPoints, fullyCorrectCount, partiallyCorrectCount, scorePercent } = calculateScores();
 
     const questionsToDisplay = questions.filter((q, idx) => {
       if (filterReview === "incorrect") {
@@ -558,9 +684,13 @@ export const QuizMode: React.FC<QuizModeProps> = ({
 
             <div>
               <span className="text-4xl sm:text-5xl font-extrabold text-white">
-                {correctCount}/{questions.length}
+                {partiallyCorrectCount > 0 ? `${earnedPoints}` : `${fullyCorrectCount}`}/{questions.length}
               </span>
-              <p className="text-xs text-slate-400 mt-1">Correct Answers</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {partiallyCorrectCount > 0
+                  ? `${fullyCorrectCount} Correct • ${partiallyCorrectCount} Partial`
+                  : "Correct Answers"}
+              </p>
             </div>
           </div>
 

@@ -20,7 +20,10 @@ import {
 import { SubjectFolder, Reviewer, QuizQuestionType, FolderDocument } from "../types";
 import { parseUploadedFile, ParsedDocument } from "../utils/fileParser";
 import { saveNewReviewer, addFolderDocument } from "../utils/storage";
-import { requestStudyMaterialsGeneration } from "../utils/apiClient";
+import {
+  requestStudyMaterialsGeneration,
+  formatUserFriendlyGenerationError,
+} from "../utils/apiClient";
 
 interface CreateReviewerModalProps {
   folders: SubjectFolder[];
@@ -269,16 +272,11 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
 
       onReviewerCreated(newReviewer);
     } catch (err: any) {
-      console.error("Generation error:", err);
-      let msg = err.message || "An unexpected error occurred while generating.";
-      if (msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("high demand")) {
-        msg = "The AI service is experiencing momentary high demand. Please click 'Generate Grounded Reviewer' again in a few seconds.";
-      } else if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
-        msg = "Rate limit reached. Please wait a few seconds and try again.";
-      } else if (msg.includes("expected pattern")) {
-        msg = "A connection pattern issue was detected. A clean API path has been restored. Please try clicking Generate again.";
-      }
-      setGenerationError(msg);
+      const friendlyMsg = formatUserFriendlyGenerationError(
+        err,
+        "Create Reviewer Generation"
+      );
+      setGenerationError(friendlyMsg);
       setIsGenerating(false);
     }
   };
@@ -697,7 +695,11 @@ Stage 4: Oxidative Phosphorylation & Electron Transport Chain (ETC)
             {generationError && (
               <div className="p-3 rounded-xl bg-red-950/50 border border-red-500/30 text-xs text-red-300 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
-                <span>{generationError}</span>
+                <span>
+                  {typeof generationError === "string" && generationError !== "[object Object]"
+                    ? generationError
+                    : "The AI service is experiencing a temporary issue. Please click Generate again in a few moments."}
+                </span>
               </div>
             )}
 

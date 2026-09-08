@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { generateReviewerCore } from "../src/server/generateReviewerCore";
+import { gradeIdentificationCore } from "../src/server/gradeIdentificationCore";
 
 dotenv.config();
 
@@ -27,23 +27,12 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  // Check server-side GEMINI_API_KEY environment variable
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) {
-    console.error("[Vercel Function Error] GEMINI_API_KEY environment variable is not configured.");
-    return res.status(500).json({
-      success: false,
-      error:
-        "GEMINI_API_KEY environment variable is not configured. Please add GEMINI_API_KEY in your Vercel Project Settings (Settings > Environment Variables) or server environment.",
-    });
-  }
-
   try {
     let body = req.body;
     if (typeof body === "string") {
       try {
         body = JSON.parse(body);
-      } catch (parseErr) {
+      } catch (_parseErr) {
         return res.status(400).json({
           success: false,
           error: "Invalid JSON request payload.",
@@ -58,28 +47,29 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const data = await generateReviewerCore(body);
+    const { question, groundedAnswer, studentAnswer, sourceExcerpt } = body;
+
+    const result = await gradeIdentificationCore({
+      question,
+      groundedAnswer: groundedAnswer || "",
+      studentAnswer: studentAnswer || "",
+      sourceExcerpt,
+    });
+
     return res.status(200).json({
       success: true,
-      data,
-      ...data,
+      ...result,
     });
   } catch (error: any) {
-    console.error("[Vercel Function] Error in /api/generate-reviewer:", error);
+    console.error("[Vercel Function] Error in /api/grade-identification:", error);
     const msg =
       typeof error?.message === "string" && error.message !== "[object Object]"
         ? error.message
-        : typeof error?.error === "string"
-        ? error.error
-        : typeof error?.error?.message === "string"
-        ? error.error.message
-        : String(error || "Failed to generate study materials from content.");
-    const statusCode = msg.includes("GEMINI_API_KEY") ? 500 : msg.includes("rate limit") ? 429 : 503;
-    return res.status(statusCode).json({
+        : String(error || "Failed to grade identification answer.");
+    return res.status(500).json({
       success: false,
       error: msg,
       message: msg,
     });
   }
 }
-

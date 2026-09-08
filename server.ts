@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { generateReviewerCore } from "./src/server/generateReviewerCore";
+import { gradeIdentificationCore } from "./src/server/gradeIdentificationCore";
 
 dotenv.config();
 
@@ -38,11 +39,45 @@ app.post(["/api/generate-reviewer", "/generate-reviewer"], async (req, res) => {
     return res.status(200).json({ success: true, data, ...data });
   } catch (error: any) {
     console.error("Error in /api/generate-reviewer:", error);
-    const msg = error.message || "Failed to generate reviewer from content.";
+    const msg =
+      typeof error?.message === "string" && error.message !== "[object Object]"
+        ? error.message
+        : typeof error?.error === "string"
+        ? error.error
+        : typeof error?.error?.message === "string"
+        ? error.error.message
+        : String(error || "Failed to generate reviewer from content.");
     const statusCode = msg.includes("GEMINI_API_KEY") ? 500 : msg.includes("rate limit") ? 429 : 503;
     return res.status(statusCode).json({
       success: false,
       error: msg,
+      message: msg,
+    });
+  }
+});
+
+// Grade identification endpoint evaluating semantic similarity based on meaning in Strict Source Mode
+app.post(["/api/grade-identification", "/grade-identification"], async (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  try {
+    const { question, groundedAnswer, studentAnswer, sourceExcerpt } = req.body || {};
+    const result = await gradeIdentificationCore({
+      question,
+      groundedAnswer: groundedAnswer || "",
+      studentAnswer: studentAnswer || "",
+      sourceExcerpt,
+    });
+    return res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    console.error("Error in /api/grade-identification:", error);
+    const msg =
+      typeof error?.message === "string" && error.message !== "[object Object]"
+        ? error.message
+        : String(error || "Failed to evaluate identification answer.");
+    return res.status(500).json({
+      success: false,
+      error: msg,
+      message: msg,
     });
   }
 });

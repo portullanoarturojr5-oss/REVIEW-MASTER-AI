@@ -91,6 +91,19 @@ export interface QuizQuestionItem {
   questionCategory?: QuestionCategory;
 }
 
+export type IdentificationVerdict = "correct" | "partially_correct" | "incorrect";
+
+export interface IdentificationGradingResult {
+  scorePercent: number; // 0 to 100
+  verdict: IdentificationVerdict;
+  verdictLabel: "Correct" | "Correct (same meaning)" | "Partially Correct" | "Incorrect";
+  groundedAnswer: string;
+  explanation: string;
+  matchedConcepts: string[];
+  missingConcepts: string[];
+  isAiGraded?: boolean;
+}
+
 export interface ProgressiveSetScore {
   setNumber: number;
   scorePercent: number;
