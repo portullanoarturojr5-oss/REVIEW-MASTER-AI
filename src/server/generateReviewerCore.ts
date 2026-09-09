@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
-import { ExtractedVisual } from "../types";
+import type { ExtractedVisual } from "../types";
 
 dotenv.config();
 

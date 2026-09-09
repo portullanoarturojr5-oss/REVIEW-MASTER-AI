@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
-import { IdentificationGradingResult } from "../types";
-import { gradeIdentificationAnswerLocally } from "../utils/identificationEvaluator";
+import type { IdentificationGradingResult } from "../types";
+import { gradeIdentificationAnswerLocally } from "../utils/identificationEvaluator.ts";
 
 dotenv.config();
 

@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
-import { gradeIdentificationCore } from "../src/server/gradeIdentificationCore";
-import { extractCleanErrorMessage } from "../src/server/generateReviewerCore";
+import { gradeIdentificationCore } from "../src/server/gradeIdentificationCore.ts";
+import { extractCleanErrorMessage } from "../src/server/generateReviewerCore.ts";
 
 dotenv.config();
 

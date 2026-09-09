@@ -1,4 +1,4 @@
-import { IdentificationGradingResult, IdentificationVerdict } from "../types";
+import type { IdentificationGradingResult, IdentificationVerdict } from "../types";
 
 /**
  * Intelligent Identification Grading
