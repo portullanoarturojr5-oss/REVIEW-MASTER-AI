@@ -7,16 +7,16 @@
       "destination": "/api/generate-reviewer"
     },
     {
+      "source": "/api/grade-identification",
+      "destination": "/api/grade-identification"
+    },
+    {
       "source": "/api/health",
       "destination": "/api/health"
     },
     {
       "source": "/api/:path*",
-      "destination": "/api"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api"
+      "destination": "/api/index"
     },
     {
       "source": "/:path*",
@@ -24,5 +24,3 @@
     }
   ]
 }
-
-

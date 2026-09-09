@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { generateReviewerCore, extractCleanErrorMessage } from "../src/server/generateReviewerCore.ts";
+import { generateReviewerCore, extractCleanErrorMessage } from "./generateReviewerCore.ts";
 
 dotenv.config();
 
