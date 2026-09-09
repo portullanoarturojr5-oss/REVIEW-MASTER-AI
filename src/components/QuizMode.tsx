@@ -751,7 +751,7 @@ export const QuizMode: React.FC<QuizModeProps> = ({
                     : "text-slate-400 hover:text-white"
                 }`}
               >
-                Incorrect ({questions.length - correctCount})
+                Incorrect ({questions.length - fullyCorrectCount})
               </button>
             </div>
           </div>

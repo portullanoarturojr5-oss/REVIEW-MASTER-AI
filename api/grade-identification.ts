@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { gradeIdentificationCore } from "../src/server/gradeIdentificationCore";
+import { extractCleanErrorMessage } from "../src/server/generateReviewerCore";
 
 dotenv.config();
 
@@ -61,15 +62,12 @@ export default async function handler(req: any, res: any) {
       ...result,
     });
   } catch (error: any) {
-    console.error("[Vercel Function] Error in /api/grade-identification:", error);
-    const msg =
-      typeof error?.message === "string" && error.message !== "[object Object]"
-        ? error.message
-        : String(error || "Failed to grade identification answer.");
+    console.error("Original exception in POST /api/grade-identification:", error);
+    const msg = extractCleanErrorMessage(error, "Failed to grade identification answer.");
     return res.status(500).json({
       success: false,
-      error: msg,
       message: msg,
+      error: msg,
     });
   }
 }

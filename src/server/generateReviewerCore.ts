@@ -7,6 +7,10 @@ dotenv.config();
 export interface GenerateReviewerCoreParams {
   content?: string;
   rawContent?: string;
+  text?: string;
+  notes?: string;
+  sourceText?: string;
+  documentText?: string;
   pdfBase64?: string;
   fileBase64?: string;
   mimeType?: string;
@@ -22,6 +26,107 @@ export interface GenerateReviewerCoreParams {
   fileName?: string;
   documentIds?: string[];
   fileNames?: string[];
+}
+
+/**
+ * Safely extracts a clean, human-readable error message from any error object.
+ * Guarantees that raw objects or "[object Object]" are NEVER returned.
+ */
+export function extractCleanErrorMessage(
+  error: any,
+  fallback = "Failed to generate study materials from content."
+): string {
+  if (!error) return fallback;
+
+  // If already a non-empty string
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (!trimmed || trimmed === "[object Object]") return fallback;
+    if (
+      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    ) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return extractCleanErrorMessage(parsed, fallback);
+      } catch {
+        return trimmed;
+      }
+    }
+    return trimmed;
+  }
+
+  // If Error instance or object with .message
+  if (typeof error.message === "string") {
+    const trimmed = error.message.trim();
+    if (trimmed && trimmed !== "[object Object]") {
+      if (
+        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+      ) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          return extractCleanErrorMessage(parsed, fallback);
+        } catch {
+          return trimmed;
+        }
+      }
+      return trimmed;
+    }
+  }
+
+  // If object has .error
+  if (error.error !== undefined && error.error !== null) {
+    if (typeof error.error === "string") {
+      const trimmed = error.error.trim();
+      if (trimmed && trimmed !== "[object Object]") {
+        if (
+          (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+          (trimmed.startsWith("[") && trimmed.endsWith("]"))
+        ) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            return extractCleanErrorMessage(parsed, fallback);
+          } catch {
+            return trimmed;
+          }
+        }
+        return trimmed;
+      }
+    } else if (typeof error.error === "object") {
+      return extractCleanErrorMessage(error.error, fallback);
+    }
+  }
+
+  // If object has .details (Google RPC error info)
+  if (Array.isArray(error.details) && error.details.length > 0) {
+    const firstDetail = error.details[0];
+    if (typeof firstDetail?.message === "string" && firstDetail.message.trim()) {
+      return firstDetail.message.trim();
+    }
+  }
+
+  // If object has .statusText
+  if (typeof error.statusText === "string" && error.statusText.trim()) {
+    return error.statusText.trim();
+  }
+
+  // If object has .cause
+  if (error.cause) {
+    return extractCleanErrorMessage(error.cause, fallback);
+  }
+
+  // Safe string conversion check
+  try {
+    const str = String(error);
+    if (str && str !== "[object Object]" && !str.startsWith("[object ")) {
+      return str;
+    }
+  } catch {
+    // Ignore conversion error
+  }
+
+  return fallback;
 }
 
 export function getGeminiClient(): GoogleGenAI {
@@ -42,12 +147,30 @@ export function getGeminiClient(): GoogleGenAI {
 }
 
 export async function generateReviewerCore(params: GenerateReviewerCoreParams) {
-  // Strict sanitization: Never allow blob URLs, file objects, or malformed values
+  // Support content in all variations sent by PDF, DOCX, PPTX, and TXT parsers or direct API calls
   let rawSource = "";
   if (typeof params.content === "string") {
     rawSource = params.content;
   } else if (typeof params.rawContent === "string") {
     rawSource = params.rawContent;
+  } else if (typeof (params as any).text === "string") {
+    rawSource = (params as any).text;
+  } else if (typeof (params as any).notes === "string") {
+    rawSource = (params as any).notes;
+  } else if (typeof (params as any).sourceText === "string") {
+    rawSource = (params as any).sourceText;
+  } else if (typeof (params as any).documentText === "string") {
+    rawSource = (params as any).documentText;
+  } else if (params.content && typeof params.content === "object") {
+    if (typeof (params.content as any).text === "string") {
+      rawSource = (params.content as any).text;
+    } else if (typeof (params.content as any).content === "string") {
+      rawSource = (params.content as any).content;
+    }
+  } else if ((params as any).document && typeof (params as any).document === "object") {
+    if (typeof (params as any).document.text === "string") {
+      rawSource = (params as any).document.text;
+    }
   }
 
   // Reject blob: or file: URLs mistakenly sent as text content
@@ -71,9 +194,17 @@ export async function generateReviewerCore(params: GenerateReviewerCoreParams) {
 
   // Validate documentBase64: Ensure it is genuine base64 and never a blob: URL
   let documentBase64: string | undefined = undefined;
-  const candidateDoc = params.pdfBase64 || params.fileBase64;
+  const candidateDoc =
+    params.pdfBase64 ||
+    params.fileBase64 ||
+    (params as any).base64 ||
+    (params as any).fileData;
   if (typeof candidateDoc === "string") {
-    if (candidateDoc.startsWith("blob:") || candidateDoc.startsWith("http:") || candidateDoc === "[object Object]") {
+    if (
+      candidateDoc.startsWith("blob:") ||
+      candidateDoc.startsWith("http:") ||
+      candidateDoc === "[object Object]"
+    ) {
       console.warn("[Sanitizer] Rejected invalid documentBase64 containing URL or object reference.");
     } else {
       // Strip data URI prefix if present
@@ -237,8 +368,8 @@ ${sourceText ? sourceText.slice(0, 95000) : "[See attached visual document]"}
     }
   }
 
-  // If document base64 was passed directly
-  if (documentBase64 && contentParts.length === 0) {
+  // If document base64 was passed, include it in contentParts
+  if (documentBase64) {
     contentParts.push({
       inlineData: {
         mimeType: params.mimeType || "application/pdf",
@@ -506,35 +637,36 @@ ${sourceText ? sourceText.slice(0, 95000) : "[See attached visual document]"}
   if (!parsedData) {
     console.error(
       "[Gemini API] All candidate models failed. Last error:",
-      String(lastError?.message || lastError).slice(0, 250)
+      extractCleanErrorMessage(lastError).slice(0, 300)
     );
-    const rawMsg = String(lastError?.message || lastError || "");
+    const cleanMsg = extractCleanErrorMessage(
+      lastError,
+      "The AI service is temporarily experiencing high demand. Please try again in a few moments."
+    );
     if (
-      rawMsg.includes("503") ||
-      rawMsg.includes("UNAVAILABLE") ||
-      rawMsg.includes("high demand")
+      cleanMsg.includes("503") ||
+      cleanMsg.includes("UNAVAILABLE") ||
+      cleanMsg.includes("high demand")
     ) {
       throw new Error(
         "The Gemini AI service is currently experiencing temporary high demand spikes. Please try clicking Generate again in a few moments."
       );
-    } else if (rawMsg.includes("429") || rawMsg.includes("RESOURCE_EXHAUSTED")) {
+    } else if (cleanMsg.includes("429") || cleanMsg.includes("RESOURCE_EXHAUSTED") || cleanMsg.includes("rate limit")) {
       throw new Error(
         "Gemini rate limit reached. Please wait a moment before trying again."
       );
     } else if (
-      rawMsg.includes("GEMINI_API_KEY") ||
-      rawMsg.includes("API_KEY_INVALID") ||
-      rawMsg.includes("authentication credentials") ||
-      rawMsg.includes("401") ||
-      rawMsg.includes("UNAUTHENTICATED")
+      cleanMsg.includes("GEMINI_API_KEY") ||
+      cleanMsg.includes("API_KEY_INVALID") ||
+      cleanMsg.includes("authentication credentials") ||
+      cleanMsg.includes("401") ||
+      cleanMsg.includes("UNAUTHENTICATED")
     ) {
       throw new Error(
-        "GEMINI_API_KEY environment variable is missing or invalid. Please check GEMINI_API_KEY in your Vercel Project Settings (Settings > Environment Variables)."
+        "GEMINI_API_KEY environment variable is missing or invalid. Please check GEMINI_API_KEY in your server environment."
       );
     }
-    throw new Error(
-      "The AI service is temporarily experiencing high demand. Please try again in a few moments."
-    );
+    throw new Error(cleanMsg);
   }
 
   // Cross-link extracted visual data URLs into studyNotes, flashcards, and quizQuestions

@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { generateReviewerCore } from "./src/server/generateReviewerCore";
+import { generateReviewerCore, extractCleanErrorMessage } from "./src/server/generateReviewerCore";
 import { gradeIdentificationCore } from "./src/server/gradeIdentificationCore";
 
 dotenv.config();
@@ -26,32 +26,68 @@ app.post(["/api/generate-reviewer", "/generate-reviewer"], async (req, res) => {
   // Verify server-side GEMINI_API_KEY
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
+    const errorMsg =
+      "GEMINI_API_KEY environment variable is not configured. Please add GEMINI_API_KEY to your environment variables.";
     console.error("[Server Error] GEMINI_API_KEY environment variable is not configured.");
     return res.status(500).json({
       success: false,
-      error:
-        "GEMINI_API_KEY environment variable is not configured. Please add GEMINI_API_KEY in your Vercel Project Settings (Settings > Environment Variables) or server environment.",
+      message: errorMsg,
+      error: errorMsg,
     });
   }
 
   try {
-    const data = await generateReviewerCore(req.body);
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch (parseErr) {
+        console.error("Invalid JSON body in /api/generate-reviewer:", parseErr);
+        return res.status(400).json({
+          success: false,
+          message: "Invalid JSON request payload.",
+          error: "Invalid JSON request payload.",
+        });
+      }
+    }
+
+    if (!body || (typeof body === "object" && Object.keys(body).length === 0)) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing study materials request body.",
+        error: "Missing study materials request body.",
+      });
+    }
+
+    const data = await generateReviewerCore(body);
     return res.status(200).json({ success: true, data, ...data });
   } catch (error: any) {
-    console.error("Error in /api/generate-reviewer:", error);
-    const msg =
-      typeof error?.message === "string" && error.message !== "[object Object]"
-        ? error.message
-        : typeof error?.error === "string"
-        ? error.error
-        : typeof error?.error?.message === "string"
-        ? error.error.message
-        : String(error || "Failed to generate reviewer from content.");
-    const statusCode = msg.includes("GEMINI_API_KEY") ? 500 : msg.includes("rate limit") ? 429 : 503;
+    console.error("Original exception in POST /api/generate-reviewer:", error);
+    const readableMessage = extractCleanErrorMessage(
+      error,
+      "Failed to generate study materials from content."
+    );
+    const isRateLimit =
+      readableMessage.includes("rate limit") ||
+      readableMessage.includes("RESOURCE_EXHAUSTED") ||
+      readableMessage.includes("429") ||
+      error?.status === 429;
+    const isHighDemand =
+      readableMessage.includes("high demand") ||
+      readableMessage.includes("UNAVAILABLE") ||
+      readableMessage.includes("503") ||
+      error?.status === 503;
+    const isBadInput =
+      readableMessage.includes("No study content provided") ||
+      readableMessage.includes("Invalid content format") ||
+      readableMessage.includes("Missing study materials") ||
+      error?.status === 400;
+
+    const statusCode = isBadInput ? 400 : isRateLimit ? 429 : isHighDemand ? 503 : 500;
     return res.status(statusCode).json({
       success: false,
-      error: msg,
-      message: msg,
+      message: readableMessage,
+      error: readableMessage,
     });
   }
 });
@@ -69,15 +105,12 @@ app.post(["/api/grade-identification", "/grade-identification"], async (req, res
     });
     return res.status(200).json({ success: true, ...result });
   } catch (error: any) {
-    console.error("Error in /api/grade-identification:", error);
-    const msg =
-      typeof error?.message === "string" && error.message !== "[object Object]"
-        ? error.message
-        : String(error || "Failed to evaluate identification answer.");
+    console.error("Original exception in POST /api/grade-identification:", error);
+    const msg = extractCleanErrorMessage(error, "Failed to evaluate identification answer.");
     return res.status(500).json({
       success: false,
-      error: msg,
       message: msg,
+      error: msg,
     });
   }
 });
@@ -85,20 +118,24 @@ app.post(["/api/grade-identification", "/grade-identification"], async (req, res
 // Explicit JSON fallback for all unmatched /api/* requests (NEVER return HTML)
 app.all(["/api", "/api/*"], (_req, res) => {
   res.setHeader("Content-Type", "application/json");
+  const notFoundMsg = "API endpoint not found. Please verify the requested API path.";
   return res.status(404).json({
     success: false,
-    error: "API endpoint not found. Please verify the requested API path.",
+    message: notFoundMsg,
+    error: notFoundMsg,
   });
 });
 
-// Global error-handling middleware to ensure errors always return JSON
+// Global error-handling middleware to ensure errors always return clean JSON
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("Unhandled Express server error:", err);
   res.setHeader("Content-Type", "application/json");
   const statusCode = err.status || err.statusCode || 500;
+  const cleanMsg = extractCleanErrorMessage(err, "An unexpected server error occurred.");
   return res.status(statusCode).json({
     success: false,
-    error: err.message || "An unexpected server error occurred.",
+    message: cleanMsg,
+    error: cleanMsg,
   });
 });
 
