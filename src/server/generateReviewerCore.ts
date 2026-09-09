@@ -1,1 +1,1 @@
-export * from "../../api/generateReviewerCore.ts";
+export * from "../../api/generateReviewerCore";

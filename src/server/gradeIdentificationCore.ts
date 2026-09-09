@@ -1,1 +1,1 @@
-export * from "../../api/gradeIdentificationCore.ts";
+export * from "../../api/gradeIdentificationCore";
