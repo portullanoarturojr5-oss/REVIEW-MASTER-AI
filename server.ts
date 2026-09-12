@@ -1,8 +1,8 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { generateReviewerCore, extractCleanErrorMessage } from "./api/generateReviewerCore";
-import { gradeIdentificationCore } from "./api/gradeIdentificationCore";
+import { generateReviewerCore, extractCleanErrorMessage } from "./api/generate-reviewer";
+import { gradeIdentificationCore } from "./api/grade-identification";
 
 dotenv.config();
 
